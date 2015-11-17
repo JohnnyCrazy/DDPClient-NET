@@ -3,6 +3,7 @@ using DdpClient;
 using DdpClient.EJson;
 using DdpClient.Models;
 using DdpClient.Models.Client;
+using DdpClient.Models.Server;
 using Moq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -16,17 +17,18 @@ namespace DDPClient.Tests
         [SetUp]
         public void Setup()
         {
-            _methodId = "ARandomId";
             _mock = new Mock<IDdpWebSocket>();
-            _connection = new DdpConnection(_mock.Object)
-            {
-                IdGenerator = () => _methodId
-            };
+            _connection = new DdpConnection(_mock.Object);
+        }
+
+        private class TestClass
+        {
+            [JsonProperty("data")]
+            public int Data { get; set; }
         }
 
         private Mock<IDdpWebSocket> _mock;
         private DdpConnection _connection;
-        private string _methodId;
 
         [Test]
         public void ShouldHandleConnectSuccess()
@@ -36,9 +38,10 @@ namespace DDPClient.Tests
 
             bool wasRaised = false;
             EventHandler<EventArgs> handler = null;
-            handler = delegate (object sender, EventArgs e)
+            handler = (sender, args) =>
             {
                 wasRaised = true;
+                _connection.Open -= handler;
             };
             _connection.Open += handler;
 
@@ -47,6 +50,157 @@ namespace DDPClient.Tests
             Assert.IsTrue(wasRaised);
             _mock.Verify(webSocket => webSocket.Connect());
             _mock.Verify(webSocket => webSocket.SendJson(It.IsAny<ConnectModel>()));
+        }
+
+        [Test]
+        public void ShouldHandleDdpConnectSuccess()
+        {
+            string session = "SomeSession";
+
+            _mock.Setup(websocket => websocket.SendJson(It.IsAny<ConnectModel>()))
+                .Callback(() => _mock.Raise(webSocket => webSocket.DdpMessage += null, null, new DdpMessage("connected", "{\"msg\":\"connected\", \"session\":\"" + session + "\"}")));
+
+            bool wasRaised = false;
+            EventHandler<ConnectResponse> handler = null;
+            handler = (sender, response) =>
+            {
+                wasRaised = true;
+                Assert.IsNull(response.Failed);
+                Assert.AreEqual(session, response.Session);
+                _connection.Connected -= handler;
+            };
+            _connection.Connected += handler;
+
+            _mock.Raise(webSocket => webSocket.OnOpen += null, null, EventArgs.Empty);
+
+            Assert.IsTrue(wasRaised);
+        }
+
+        [Test]
+        public void ShouldHandleDdpConnectFailed()
+        {
+            string version = "2";
+
+            _mock.Setup(websocket => websocket.SendJson(It.IsAny<ConnectModel>()))
+                .Callback(() => _mock.Raise(webSocket => webSocket.DdpMessage += null, null, new DdpMessage("failed", "{\"msg\":\"failed\", \"version\":\"" + version + "\"}")));
+
+            bool wasRaised = false;
+            EventHandler<ConnectResponse> handler = null;
+            handler = (sender, response) =>
+            {
+                wasRaised = true;
+                Assert.IsNull(response.Session);
+                Assert.AreEqual(version, response.Failed.Version);
+                _connection.Connected -= handler;
+            };
+            _connection.Connected += handler;
+
+            _mock.Raise(webSocket => webSocket.OnOpen += null, null, EventArgs.Empty);
+
+            Assert.IsTrue(wasRaised);
+        }
+
+        [Test]
+        public void ShouldHandleMethod()
+        {
+            string id = "ShouldHandleMethod";
+            string methodName = "MethodName";
+            int parameter = 5;
+            _connection.IdGenerator = () => id;
+
+            _connection.Call(methodName, parameter);
+
+            _mock.Verify(webSocket => webSocket.SendJson(It.Is<MethodModel>(model => model.Id == id)));
+        }
+
+        [Test]
+        public void ShouldHandleMethodDynamic()
+        {
+            string id = "ShouldHandleMethodDynamic";
+            string methodName = "MethodName";
+            int parameter = 5;
+            _connection.IdGenerator = () => id;
+
+            MethodResponse response = new MethodResponse
+            {
+                Id = id,
+                Error = null,
+                Result = new JObject(new JProperty("someResult", 10))
+            };
+
+            _mock.Setup(webSocket => webSocket.SendJson(It.Is<MethodModel>(model => model.Id == id)))
+                .Callback(() => _mock.Raise(webSocket => webSocket.DdpMessage += null, null, new DdpMessage("result", JsonConvert.SerializeObject(response))));
+
+            bool wasCalled = false;
+            Action<MethodResponse> callback = mResponse =>
+            {
+                wasCalled = true;
+                Assert.IsNull(mResponse.Error);
+                Assert.IsNotNull(mResponse.Result);
+            };
+
+            _connection.Call(methodName, callback, parameter);
+
+            _mock.Verify(webSocket => webSocket.SendJson(It.Is<MethodModel>(model => model.Id == id)));
+            Assert.IsTrue(wasCalled);
+        }
+
+        [Test]
+        public void ShouldHandleMethodFixedValue()
+        {
+            const string id = "ShouldHandleMethodFixedValue";
+            const string methodName = "MethodName";
+            const int parameter = 5;
+            const int result = 10;
+
+            _connection.IdGenerator = () => id;
+
+            string mockResult = "{\"msg\":\"result\",\"id\":\"" + id + "\",\"result\": 10}";
+
+            _mock.Setup(webSocket => webSocket.SendJson(It.Is<MethodModel>(model => model.Id == id)))
+                .Callback(() => _mock.Raise(webSocket => webSocket.DdpMessage += null, null, new DdpMessage("result", mockResult)));
+
+            bool wasCalled = false;
+            Action<DetailedError, int> callback = (error, mResponse) =>
+            {
+                wasCalled = true;
+                Assert.IsNull(error);
+                Assert.AreEqual(result, mResponse);
+            };
+
+            _connection.Call(methodName, callback, parameter);
+
+            _mock.Verify(webSocket => webSocket.SendJson(It.Is<MethodModel>(model => model.Id == id)));
+            Assert.IsTrue(wasCalled);
+        }
+
+        [Test]
+        public void ShouldHandleMethodFixedObject()
+        {
+            const string id = "ShouldHandleMethodFixedObject";
+            const string methodName = "MethodName";
+            const int parameter = 5;
+            const int result = 10;
+
+            _connection.IdGenerator = () => id;
+
+            string mockResult = "{\"msg\":\"result\",\"id\":\"" + id + "\",\"result\":{\"data\": 10}}";
+
+            _mock.Setup(webSocket => webSocket.SendJson(It.Is<MethodModel>(model => model.Id == id)))
+                .Callback(() => _mock.Raise(webSocket => webSocket.DdpMessage += null, null, new DdpMessage("result", mockResult)));
+
+            bool wasCalled = false;
+            Action<DetailedError, TestClass> callback = (error, mResponse) =>
+            {
+                wasCalled = true;
+                Assert.IsNull(error);
+                Assert.AreEqual(result, mResponse.Data);
+            };
+
+            _connection.Call(methodName, callback, parameter);
+
+            _mock.Verify(webSocket => webSocket.SendJson(It.Is<MethodModel>(model => model.Id == id)));
+            Assert.IsTrue(wasCalled);
         }
 
         [Test]
@@ -96,30 +250,105 @@ namespace DDPClient.Tests
         }
 
         [Test]
-        public void ShouldHandleMethod()
+        public void ShouldLoginWithEmailSuccess()
         {
-            
+            String methodId = "SomeRandomId";
+            _connection.IdGenerator = () => methodId;
+
+            MethodResponse response = new MethodResponse
+            {
+                Id = methodId,
+                Error = null,
+                Result = new JObject(new JProperty("tokenExpires", JToken.FromObject(new DdpDate())), new JProperty("token", "SomeTokenId"))
+            };
+            _mock.Setup(websocket => websocket.SendJson(It.IsAny<MethodModel>()))
+                .Callback(() => _mock.Raise(socket => socket.DdpMessage += null, null, new DdpMessage("result", JsonConvert.SerializeObject(response))));
+
+            string email = "some@email.de";
+            string password = "SecretPassword";
+
+            bool wasRaised = false;
+            EventHandler<LoginResponse> handler = null;
+            handler = delegate(object sender, LoginResponse loginResponse)
+            {
+                wasRaised = true;
+                Assert.IsFalse(loginResponse.HasError());
+                Assert.IsNotNull(loginResponse.Token);
+                Assert.IsNotNull(loginResponse.TokenExpires);
+                _connection.Login -= handler;
+            };
+            _connection.Login += handler;
+
+            _connection.LoginWithEmail(email, password);
+
+            _mock.Verify(websocket => websocket.SendJson(It.Is<MethodModel>(method =>
+                method.Id == methodId &&
+                method.Method == "login" &&
+                method.Params.Length == 1 &&
+                method.Params[0] is BasicLoginModel<EmailUser>)));
+            Assert.IsTrue(wasRaised);
+        }
+
+        [Test]
+        public void ShouldLoginWithTokenSuccess()
+        {
+            String methodId = "SomeRandomId";
+            _connection.IdGenerator = () => methodId;
+
+            MethodResponse response = new MethodResponse
+            {
+                Id = methodId,
+                Error = null,
+                Result = new JObject(new JProperty("tokenExpires", JToken.FromObject(new DdpDate())), new JProperty("token", "SomeTokenId"))
+            };
+            _mock.Setup(websocket => websocket.SendJson(It.IsAny<MethodModel>()))
+                .Callback(() => _mock.Raise(socket => socket.DdpMessage += null, null, new DdpMessage("result", JsonConvert.SerializeObject(response))));
+
+            string token = "SomeRandomToken";
+
+            bool wasRaised = false;
+            EventHandler<LoginResponse> handler = null;
+            handler = delegate(object sender, LoginResponse loginResponse)
+            {
+                wasRaised = true;
+                Assert.IsFalse(loginResponse.HasError());
+                Assert.IsNotNull(loginResponse.Token);
+                Assert.IsNotNull(loginResponse.TokenExpires);
+                _connection.Login -= handler;
+            };
+            _connection.Login += handler;
+
+            _connection.LoginWithToken(token);
+
+            _mock.Verify(websocket => websocket.SendJson(It.Is<MethodModel>(method =>
+                method.Id == methodId &&
+                method.Method == "login" &&
+                method.Params.Length == 1 &&
+                method.Params[0] is BasicTokenModel)));
+            Assert.IsTrue(wasRaised);
         }
 
         [Test]
         public void ShouldLoginWithUsernameSuccess()
         {
+            String methodId = "SomeRandomId";
+            _connection.IdGenerator = () => methodId;
+
             MethodResponse response = new MethodResponse
             {
-                Id = _methodId,
+                Id = methodId,
                 Error = null,
                 Result = new JObject(new JProperty("tokenExpires", JToken.FromObject(new DdpDate())), new JProperty("token", "SomeTokenId"))
             };
+            _mock.Setup(websocket => websocket.SendJson(It.IsAny<MethodModel>()))
+                .Callback(() => _mock.Raise(socket => socket.DdpMessage += null, null, new DdpMessage("result", JsonConvert.SerializeObject(response))));
 
             string username = "TestUser";
             string password = "SecretPassword";
 
-            _mock.Setup(websocket => websocket.SendJson(It.IsAny<MethodModel>()))
-                .Callback(() => _mock.Raise(socket => socket.DdpMessage += null, null, new DdpMessage("result", JsonConvert.SerializeObject(response))));
-
             bool wasRaised = false;
             EventHandler<LoginResponse> handler = null;
-            handler = delegate (object sender, LoginResponse loginResponse)
+            handler = delegate(object sender, LoginResponse loginResponse)
             {
                 wasRaised = true;
                 Assert.IsFalse(loginResponse.HasError());
@@ -132,11 +361,54 @@ namespace DDPClient.Tests
             _connection.LoginWithUsername(username, password);
 
             _mock.Verify(websocket => websocket.SendJson(It.Is<MethodModel>(method =>
+                method.Id == methodId &&
                 method.Method == "login" &&
                 method.Params.Length == 1 &&
                 method.Params[0] is BasicLoginModel<UsernameUser>)));
-
+            Assert.IsTrue(wasRaised);
         }
+
+
+        [Test]
+        public void ShouldHandlePongFromServerWithId()
+        {
+            string id = "ShouldHandlePongFromServerWithId";
+
+            bool wasRaised = false;
+            EventHandler<PongModel> handler = null;
+            handler = delegate (object sender, PongModel pong)
+            {
+                wasRaised = true;
+                Assert.AreEqual(id, pong.Id);
+                _connection.Pong -= handler;
+            };
+            _connection.Pong += handler;
+
+            _mock.Raise(webSocket => webSocket.DdpMessage += null, null, new DdpMessage("pong", "{\"msg\": \"pong\", \"id\": \"" + id + "\"}"));
+
+            Assert.IsTrue(wasRaised);
+        }
+
+        [Test]
+        public void ShouldHandlePongFromServerWithoutId()
+        {
+            string id = "ShouldHandlePongFromServerWithoutId";
+
+            bool wasRaised = false;
+            EventHandler<PongModel> handler = null;
+            handler = delegate (object sender, PongModel pong)
+            {
+                wasRaised = true;
+                Assert.IsNull(pong.Id);
+                _connection.Pong -= handler;
+            };
+            _connection.Pong += handler;
+
+            _mock.Raise(webSocket => webSocket.DdpMessage += null, null, new DdpMessage("pong", "{\"msg\": \"pong\"}"));
+
+            Assert.IsTrue(wasRaised);
+        }
+
 
         [Test]
         public void ShouldPingWithId()
