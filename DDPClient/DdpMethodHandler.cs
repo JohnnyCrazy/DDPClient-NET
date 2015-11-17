@@ -6,17 +6,17 @@ namespace DdpClient
 {
     public class DdpMethodHandler<T>
     {
-        private readonly DdpWebSocket _webSocket;
+        private readonly IDdpWebSocket _webSocket;
         private readonly Action<DetailedError, T> _callback;
         public string Id { get; set; }
 
-        public DdpMethodHandler(DdpWebSocket webSocket, Action<DetailedError, T> callback)
+        public DdpMethodHandler(IDdpWebSocket webSocket, Action<DetailedError, T> callback, string id)
         {
             _webSocket = webSocket;
             _callback = callback;
             _webSocket.DdpMessage += WebSocketOnDdpMessage;
 
-            Id = Util.GetRandomId();
+            Id = id;
         }
 
         private void WebSocketOnDdpMessage(object sender, DdpMessage ddpMessage)

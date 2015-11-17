@@ -1,10 +1,11 @@
 ﻿using System;
+using System.Diagnostics.Eventing.Reader;
 using System.Security.Cryptography;
 using System.Text;
 
 namespace DdpClient
 {
-    internal class Util
+    public class DdpUtil
     {
         public static string GetRandomId()
         {
@@ -21,19 +22,18 @@ namespace DdpClient
             return Convert.ToBase64String(bytes);
         }
 
-        public static DateTime MillisecondsToDateTime(double unixTimeStamp)
+        public static DateTime MillisecondsToDateTime(long unixTimeStamp)
         {
             // Unix timestamp is seconds past epoch
-            DateTime dtDateTime = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc);
-            dtDateTime = dtDateTime.AddMilliseconds(unixTimeStamp).ToLocalTime();
-            return dtDateTime;
+            DateTime epoch = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc);
+            return epoch.AddMilliseconds(unixTimeStamp);
         }
 
-        public static long DateTimeToMilliseconds(DateTime time)
+        public static long DateTimeToMilliseconds(DateTime date)
         {
             // Unix timestamp is seconds past epoch
-            DateTime dtDateTime = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc);
-            return (long) time.Subtract(dtDateTime).TotalMilliseconds;
+            DateTime epoch = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc);
+            return Convert.ToInt64((date - epoch).TotalMilliseconds);
         }
 
         // ReSharper disable once InconsistentNaming

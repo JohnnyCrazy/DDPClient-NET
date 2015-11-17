@@ -15,6 +15,7 @@ namespace DDPClientNet.Example
         {
             _client = new DdpConnection("localhost:3000");
             _client.Retry = true;
+            _client.Login += Login;
             _client.Connected += OnConnected;
             _client.Connect();
 
@@ -22,13 +23,46 @@ namespace DDPClientNet.Example
             _client.Close();
         }
 
+        private static void Login(object sender, LoginResponse loginResponse)
+        {
+
+        }
+
         private static void OnConnected(object sender, ConnectResponse connectResponse)
         {
             if(connectResponse.DidFail())
-                Console.WriteLine("Connecting Failed");
+                Console.WriteLine("Connecting Failed" + connectResponse.Failed.Version);
             Console.WriteLine("Connected! Our Session: " + connectResponse.Session);
 
 
+        }
+    }
+
+    internal class TaskSubscriber : IDdpSubscriber<Task>
+    {
+        public void Added(SubAddedModel<Task> added)
+        {
+            
+        }
+
+        public void AddedBefore(SubAddedBeforeModel<Task> addedBefore)
+        {
+            throw new NotImplementedException();
+        }
+
+        public void MovedBefore(SubMovedBeforeModel movedBefore)
+        {
+            throw new NotImplementedException();
+        }
+
+        public void Changed(SubChangedModel<Task> changed)
+        {
+            throw new NotImplementedException();
+        }
+
+        public void Removed(SubRemovedModel removed)
+        {
+            throw new NotImplementedException();
         }
     }
 

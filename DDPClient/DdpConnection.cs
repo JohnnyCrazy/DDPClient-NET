@@ -14,9 +14,9 @@ namespace DdpClient
     {
         private const string Version = "1";
 
-        private readonly Dictionary<string, Action<MethodResponse>> _methods;
+        private Dictionary<string, Action<MethodResponse>> _methods;
         private readonly string[] _supportedProtocols = {"1", "pre1", "pre2"};
-        private readonly DdpWebSocket _webSocket;
+        private readonly IDdpWebSocket _webSocket;
         private bool _disposed;
 
         /// <summary>
@@ -54,19 +54,20 @@ namespace DdpClient
         /// </summary>
         public EventHandler<PongModel> Pong;
 
-
         public DdpConnection(string url, bool ssl = false)
         {
             _webSocket = new DdpWebSocket($"{(ssl ? "wss" : "ws")}://{url}/websocket");
-            _webSocket.OnOpen += WebSocketOnOpen;
-            _webSocket.DdpMessage += WebSocketMessage;
-            _webSocket.OnError += WebSocketOnError;
-            _webSocket.OnClose += WebSocketOnClose;
-
-            _methods = new Dictionary<string, Action<MethodResponse>>();
 
             WebSocketLog = _webSocket.Log;
             WebSocketLog.Output = (data, s) => { }; //Disable console output...
+
+            Initialize();
+        }
+
+        public DdpConnection(IDdpWebSocket webSocket)
+        {
+            _webSocket = webSocket;
+            Initialize();
         }
 
         public string Session { get; set; }
@@ -76,7 +77,20 @@ namespace DdpClient
         /// </summary>
         public bool Retry { get; set; }
 
+        public Func<string> IdGenerator { get; set; } 
+
         public Logger WebSocketLog { get; set; }
+
+        private void Initialize()
+        {
+            _webSocket.OnOpen += WebSocketOnOpen;
+            _webSocket.DdpMessage += WebSocketMessage;
+            _webSocket.OnError += WebSocketOnError;
+            _webSocket.OnClose += WebSocketOnClose;
+
+            _methods = new Dictionary<string, Action<MethodResponse>>();
+            IdGenerator = DdpUtil.GetRandomId;
+        }
 
         public void Dispose()
         {
@@ -102,13 +116,13 @@ namespace DdpClient
             });
         }
 
-        public void LoginWithUsername(string username, string password)
+        public string LoginWithUsername(string username, string password)
         {
             BasicLoginModel<UsernameUser> model = new BasicLoginModel<UsernameUser>
             {
                 Password = new PasswordModel
                 {
-                    Digest = Util.GetSHA256(password),
+                    Digest = DdpUtil.GetSHA256(password),
                     Algorithm = "sha-256"
                 },
                 User = new UsernameUser
@@ -116,10 +130,10 @@ namespace DdpClient
                     User = username
                 }
             };
-            Call("login", HandleLogin, model);
+            return Call("login", HandleLogin, model);
         }
 
-        public void LoginWithEmail(string email, string password)
+        public string LoginWithEmail(string email, string password)
         {
             BasicLoginModel<EmailUser> model = new BasicLoginModel<EmailUser>
             {
@@ -129,48 +143,49 @@ namespace DdpClient
                 },
                 Password = new PasswordModel
                 {
-                    Digest = Util.GetSHA256(password),
+                    Digest = DdpUtil.GetSHA256(password),
                     Algorithm = "sha-256"
                 }
             };
-            Call("login", HandleLogin, model);
+            return Call("login", HandleLogin, model);
         }
 
-        public void LoginWithToken(string token)
+        public string LoginWithToken(string token)
         {
             BasicTokenModel model = new BasicTokenModel
             {
                 Resume = token
             };
-            Call("login", HandleLogin, model);
+            return Call("login", HandleLogin, model);
         }
 
         public void Call(string name, params object[] methodParams)
         {
             MethodModel model = new MethodModel
             {
-                Id = Util.GetRandomId(),
+                Id = IdGenerator(),
                 Method = name,
                 Params = methodParams
             };
             _webSocket.SendJson(model);
         }
 
-        public void Call(string name, Action<MethodResponse> callback, params object[] methodParams)
+        public string Call(string name, Action<MethodResponse> callback, params object[] methodParams)
         {
             MethodModel model = new MethodModel
             {
-                Id = Util.GetRandomId(),
+                Id = IdGenerator(),
                 Method = name,
                 Params = methodParams
             };
             _methods[model.Id] = callback;
             _webSocket.SendJson(model);
+            return model.Id;
         }
 
         public DdpMethodHandler<T> Call<T>(string name, Action<DetailedError, T> callback, params object[] methodParams)
         {
-            DdpMethodHandler<T> methodHandler = new DdpMethodHandler<T>(_webSocket, callback);
+            DdpMethodHandler<T> methodHandler = new DdpMethodHandler<T>(_webSocket, callback, IdGenerator());
             MethodModel model = new MethodModel
             {
                 Id = methodHandler.Id,

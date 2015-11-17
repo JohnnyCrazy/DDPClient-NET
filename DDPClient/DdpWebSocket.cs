@@ -1,19 +1,24 @@
 ﻿using System;
-using System.Diagnostics;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using WebSocketSharp;
 
 namespace DdpClient
 {
-    public class DdpWebSocket : WebSocket
+    internal class DdpWebSocket : WebSocket, IDdpWebSocket
     {
         public DdpWebSocket(string url, params string[] protocols) : base(url, protocols)
         {
             OnMessage += OnMessageAdv;
         }
 
-        internal event EventHandler<DdpMessage> DdpMessage;
+        public event EventHandler<DdpMessage> DdpMessage;
+
+        public void SendJson(object body)
+        {
+            string data = JsonConvert.SerializeObject(body);
+            Send(data);
+        }
 
         private void OnMessageAdv(object sender, MessageEventArgs e)
         {
@@ -22,12 +27,6 @@ namespace DdpClient
                 return;
             string msg = body["msg"].ToObject<string>();
             DdpMessage?.Invoke(this, new DdpMessage(msg, e.Data));
-        }
-
-        public void SendJson(object body)
-        {
-            string data = JsonConvert.SerializeObject(body);
-            Send(data);
         }
     }
 }

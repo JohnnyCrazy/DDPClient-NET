@@ -6,19 +6,19 @@ namespace DdpClient
 {
     public class DdpSubHandler : IDisposable
     {
-        private readonly DdpWebSocket _webSocket;
+        private readonly IDdpWebSocket _webSocket;
 
         public EventHandler<NoSubModel> NoSub;
         public EventHandler<EventArgs> Ready;
 
-        public DdpSubHandler(DdpWebSocket webSocket, string subName, params object[] subParams)
+        public DdpSubHandler(IDdpWebSocket webSocket, string subName, params object[] subParams)
         {
             _webSocket = webSocket;
             _webSocket.DdpMessage += Message;
 
             Params = subParams;
             Name = subName;
-            Id = Util.GetRandomId();
+            Id = DdpUtil.GetRandomId();
         }
 
         public string Id { get; }

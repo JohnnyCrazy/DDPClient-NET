@@ -6,7 +6,7 @@ namespace DdpClient
 {
     public class DdpSubscriber<T> where T : DdpDocument
     {
-        private readonly DdpWebSocket _websocket;
+        private readonly IDdpWebSocket _websocket;
 
         public EventHandler<SubAddedModel<T>> Added;
         public EventHandler<SubAddedBeforeModel<T>> AddedBefore;
@@ -14,7 +14,7 @@ namespace DdpClient
         public EventHandler<SubMovedBeforeModel> MovedBefore;
         public EventHandler<SubRemovedModel> Removed;
 
-        internal DdpSubscriber(DdpWebSocket webSocket, string name)
+        internal DdpSubscriber(IDdpWebSocket webSocket, string name)
         {
             _websocket = webSocket;
             _websocket.DdpMessage += Message;

@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DDPClient", "DDPClient\DDPC
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DDPClient.Example", "DDPClient.Example\DDPClient.Example.csproj", "{07ADD765-FBC3-48AF-8B54-C181B7CBEE41}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DDPClient.Tests", "DDPClient.Tests\DDPClient.Tests.csproj", "{CBEB0DE5-5444-4293-9EBD-B7E5448B1628}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +23,10 @@ Global
 		{07ADD765-FBC3-48AF-8B54-C181B7CBEE41}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{07ADD765-FBC3-48AF-8B54-C181B7CBEE41}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{07ADD765-FBC3-48AF-8B54-C181B7CBEE41}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CBEB0DE5-5444-4293-9EBD-B7E5448B1628}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CBEB0DE5-5444-4293-9EBD-B7E5448B1628}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CBEB0DE5-5444-4293-9EBD-B7E5448B1628}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CBEB0DE5-5444-4293-9EBD-B7E5448B1628}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -2,7 +2,7 @@
 
 namespace DdpClient
 {
-    internal class DdpMessage
+    public class DdpMessage
     {
         public DdpMessage(string msg, string body)
         {
