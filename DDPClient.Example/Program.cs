@@ -7,26 +7,37 @@ using Newtonsoft.Json;
 
 namespace DDPClientNet.Example
 {
-    internal class Program
+    internal static class Program
     {
         static DdpConnection _client;
+        static DdpConnection _client2;
 
-        static void Main(string [] args)
+        private static WeakReference _testReference;
+
+        private static void Main(string [] args)
         {
-            _client = new DdpConnection("localhost:3000");
+            _client = new DdpConnection(new WebSocketAdapter());
             _client.Retry = true;
-            _client.Login += Login;
+            _client.Login += OnLogin;
             _client.Connected += OnConnected;
-            _client.Connect();
+            _client.Connect("party.johnnycrazydev.de", true);
+
+            _client2 = new DdpConnection(new WebSocketAdapter());
+            _client2.Retry = true;
+            _client2.Login += OnLogin;
+            _client2.Connected += OnConnected;
+            _client2.Connect("localhost:3000", false);
 
             Console.ReadKey();
             _client.Close();
+            _client2.Close();
         }
 
-        private static void Login(object sender, LoginResponse loginResponse)
+        private static void OnLogin(object sender, LoginResponse loginResponse)
         {
-
+            
         }
+
 
         private static void OnConnected(object sender, ConnectResponse connectResponse)
         {
@@ -34,47 +45,10 @@ namespace DDPClientNet.Example
                 Console.WriteLine("Connecting Failed" + connectResponse.Failed.Version);
             Console.WriteLine("Connected! Our Session: " + connectResponse.Session);
 
-
+            _client.Call("createRoom", response =>
+            {
+                Console.WriteLine(response.Error.Message);
+            });
         }
-    }
-
-    internal class TaskSubscriber : IDdpSubscriber<Task>
-    {
-        public void Added(SubAddedModel<Task> added)
-        {
-            
-        }
-
-        public void AddedBefore(SubAddedBeforeModel<Task> addedBefore)
-        {
-            throw new NotImplementedException();
-        }
-
-        public void MovedBefore(SubMovedBeforeModel movedBefore)
-        {
-            throw new NotImplementedException();
-        }
-
-        public void Changed(SubChangedModel<Task> changed)
-        {
-            throw new NotImplementedException();
-        }
-
-        public void Removed(SubRemovedModel removed)
-        {
-            throw new NotImplementedException();
-        }
-    }
-
-    internal class Task : DdpDocument
-    {
-        [JsonProperty("name")]
-        public string Name { get; set; }
-
-        [JsonProperty("done")]
-        public bool Done { get; set; }
-
-        [JsonProperty("createdAt")]
-        public DdpDate CreatedAt { get; set; }
     }
 }
