@@ -6,24 +6,24 @@ namespace DdpClient
 {
     public class DdpMethodHandler<T>
     {
-        private readonly IDdpWebSocket _webSocket;
+        private readonly WebSocketAdapterBase _webSocketAdapterBase;
         private readonly Action<DetailedError, T> _callback;
         public string Id { get; set; }
 
-        public DdpMethodHandler(IDdpWebSocket webSocket, Action<DetailedError, T> callback, string id)
+        public DdpMethodHandler(WebSocketAdapterBase webSocketAdapterBase, Action<DetailedError, T> callback, string id)
         {
-            _webSocket = webSocket;
+            _webSocketAdapterBase = webSocketAdapterBase;
             _callback = callback;
-            _webSocket.DdpMessage += WebSocketOnDdpMessage;
+            _webSocketAdapterBase.DdpMessage += OnDdpMessage;
 
             Id = id;
         }
 
-        private void WebSocketOnDdpMessage(object sender, DdpMessage ddpMessage)
+        private void OnDdpMessage(object sender, DdpMessage ddpMessage)
         {
             if (ddpMessage.Msg == "result" && ddpMessage.Body["id"].ToObject<string>() == Id)
             {
-                _webSocket.DdpMessage -= WebSocketOnDdpMessage;
+                _webSocketAdapterBase.DdpMessage -= OnDdpMessage;
                 JObject body = ddpMessage.Body;
                 if (body["error"] == null)
                     _callback(null, body["result"].ToObject<T>());

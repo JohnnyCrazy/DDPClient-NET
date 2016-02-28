@@ -4,7 +4,7 @@ namespace DdpClient
 {
     public class DdpDocument
     {
-        [JsonProperty]
+        [JsonProperty("_id")]
         public string Id { get; set; }
     }
 }

@@ -17,24 +17,23 @@ namespace DDPClient.Tests
         [SetUp]
         public void Setup()
         {
-            _mock = new Mock<IDdpWebSocket>();
+            _mock = new Mock<WebSocketAdapterBase>();
             _connection = new DdpConnection(_mock.Object);
         }
 
-        private class TestClass
+        private class TestClass : DdpDocument
         {
             [JsonProperty("data")]
             public int Data { get; set; }
         }
 
-        private Mock<IDdpWebSocket> _mock;
+        private Mock<WebSocketAdapterBase> _mock;
         private DdpConnection _connection;
 
         [Test]
         public void ShouldHandleConnectSuccess()
         {
-            _mock.Setup(websocket => websocket.Connect())
-                .Callback(() => _mock.Raise(webSocket => webSocket.OnOpen += null, null, EventArgs.Empty));
+            _mock.Setup(websocket => websocket.Connect(It.IsAny<string>())).Callback(() => _mock.Raise(webSocket => webSocket.Opened += null, null, EventArgs.Empty));
 
             bool wasRaised = false;
             EventHandler<EventArgs> handler = null;
@@ -45,35 +44,11 @@ namespace DDPClient.Tests
             };
             _connection.Open += handler;
 
-            _connection.Connect();
+            _connection.Connect("");
 
             Assert.IsTrue(wasRaised);
-            _mock.Verify(webSocket => webSocket.Connect());
+            _mock.Verify(webSocket => webSocket.Connect(It.IsAny<string>()));
             _mock.Verify(webSocket => webSocket.SendJson(It.IsAny<ConnectModel>()));
-        }
-
-        [Test]
-        public void ShouldHandleDdpConnectSuccess()
-        {
-            string session = "SomeSession";
-
-            _mock.Setup(websocket => websocket.SendJson(It.IsAny<ConnectModel>()))
-                .Callback(() => _mock.Raise(webSocket => webSocket.DdpMessage += null, null, new DdpMessage("connected", "{\"msg\":\"connected\", \"session\":\"" + session + "\"}")));
-
-            bool wasRaised = false;
-            EventHandler<ConnectResponse> handler = null;
-            handler = (sender, response) =>
-            {
-                wasRaised = true;
-                Assert.IsNull(response.Failed);
-                Assert.AreEqual(session, response.Session);
-                _connection.Connected -= handler;
-            };
-            _connection.Connected += handler;
-
-            _mock.Raise(webSocket => webSocket.OnOpen += null, null, EventArgs.Empty);
-
-            Assert.IsTrue(wasRaised);
         }
 
         [Test]
@@ -95,7 +70,31 @@ namespace DDPClient.Tests
             };
             _connection.Connected += handler;
 
-            _mock.Raise(webSocket => webSocket.OnOpen += null, null, EventArgs.Empty);
+            _mock.Raise(webSocket => webSocket.Opened += null, null, EventArgs.Empty);
+
+            Assert.IsTrue(wasRaised);
+        }
+
+        [Test]
+        public void ShouldHandleDdpConnectSuccess()
+        {
+            string session = "SomeSession";
+
+            _mock.Setup(websocket => websocket.SendJson(It.IsAny<ConnectModel>()))
+                .Callback(() => _mock.Raise(webSocket => webSocket.DdpMessage += null, null, new DdpMessage("connected", "{\"msg\":\"connected\", \"session\":\"" + session + "\"}")));
+
+            bool wasRaised = false;
+            EventHandler<ConnectResponse> handler = null;
+            handler = (sender, response) =>
+            {
+                wasRaised = true;
+                Assert.IsNull(response.Failed);
+                Assert.AreEqual(session, response.Session);
+                _connection.Connected -= handler;
+            };
+            _connection.Connected += handler;
+
+            _mock.Raise(webSocket => webSocket.Opened += null, null, EventArgs.Empty);
 
             Assert.IsTrue(wasRaised);
         }
@@ -146,35 +145,6 @@ namespace DDPClient.Tests
         }
 
         [Test]
-        public void ShouldHandleMethodFixedValue()
-        {
-            const string id = "ShouldHandleMethodFixedValue";
-            const string methodName = "MethodName";
-            const int parameter = 5;
-            const int result = 10;
-
-            _connection.IdGenerator = () => id;
-
-            string mockResult = "{\"msg\":\"result\",\"id\":\"" + id + "\",\"result\": 10}";
-
-            _mock.Setup(webSocket => webSocket.SendJson(It.Is<MethodModel>(model => model.Id == id)))
-                .Callback(() => _mock.Raise(webSocket => webSocket.DdpMessage += null, null, new DdpMessage("result", mockResult)));
-
-            bool wasCalled = false;
-            Action<DetailedError, int> callback = (error, mResponse) =>
-            {
-                wasCalled = true;
-                Assert.IsNull(error);
-                Assert.AreEqual(result, mResponse);
-            };
-
-            _connection.Call(methodName, callback, parameter);
-
-            _mock.Verify(webSocket => webSocket.SendJson(It.Is<MethodModel>(model => model.Id == id)));
-            Assert.IsTrue(wasCalled);
-        }
-
-        [Test]
         public void ShouldHandleMethodFixedObject()
         {
             const string id = "ShouldHandleMethodFixedObject";
@@ -195,6 +165,35 @@ namespace DDPClient.Tests
                 wasCalled = true;
                 Assert.IsNull(error);
                 Assert.AreEqual(result, mResponse.Data);
+            };
+
+            _connection.Call(methodName, callback, parameter);
+
+            _mock.Verify(webSocket => webSocket.SendJson(It.Is<MethodModel>(model => model.Id == id)));
+            Assert.IsTrue(wasCalled);
+        }
+
+        [Test]
+        public void ShouldHandleMethodFixedValue()
+        {
+            const string id = "ShouldHandleMethodFixedValue";
+            const string methodName = "MethodName";
+            const int parameter = 5;
+            const int result = 10;
+
+            _connection.IdGenerator = () => id;
+
+            string mockResult = "{\"msg\":\"result\",\"id\":\"" + id + "\",\"result\": 10}";
+
+            _mock.Setup(webSocket => webSocket.SendJson(It.Is<MethodModel>(model => model.Id == id)))
+                .Callback(() => _mock.Raise(webSocket => webSocket.DdpMessage += null, null, new DdpMessage("result", mockResult)));
+
+            bool wasCalled = false;
+            Action<DetailedError, int> callback = (error, mResponse) =>
+            {
+                wasCalled = true;
+                Assert.IsNull(error);
+                Assert.AreEqual(result, mResponse);
             };
 
             _connection.Call(methodName, callback, parameter);
@@ -249,10 +248,49 @@ namespace DDPClient.Tests
             Assert.IsTrue(wasRaised);
         }
 
+
+        [Test]
+        public void ShouldHandlePongFromServerWithId()
+        {
+            string id = "ShouldHandlePongFromServerWithId";
+
+            bool wasRaised = false;
+            EventHandler<PongModel> handler = null;
+            handler = delegate(object sender, PongModel pong)
+            {
+                wasRaised = true;
+                Assert.AreEqual(id, pong.Id);
+                _connection.Pong -= handler;
+            };
+            _connection.Pong += handler;
+
+            _mock.Raise(webSocket => webSocket.DdpMessage += null, null, new DdpMessage("pong", "{\"msg\": \"pong\", \"id\": \"" + id + "\"}"));
+
+            Assert.IsTrue(wasRaised);
+        }
+
+        [Test]
+        public void ShouldHandlePongFromServerWithoutId()
+        {
+            bool wasRaised = false;
+            EventHandler<PongModel> handler = null;
+            handler = delegate(object sender, PongModel pong)
+            {
+                wasRaised = true;
+                Assert.IsNull(pong.Id);
+                _connection.Pong -= handler;
+            };
+            _connection.Pong += handler;
+
+            _mock.Raise(webSocket => webSocket.DdpMessage += null, null, new DdpMessage("pong", "{\"msg\": \"pong\"}"));
+
+            Assert.IsTrue(wasRaised);
+        }
+
         [Test]
         public void ShouldLoginWithEmailSuccess()
         {
-            String methodId = "SomeRandomId";
+            const string methodId = "SomeRandomId";
             _connection.IdGenerator = () => methodId;
 
             MethodResponse response = new MethodResponse
@@ -370,47 +408,6 @@ namespace DDPClient.Tests
 
 
         [Test]
-        public void ShouldHandlePongFromServerWithId()
-        {
-            string id = "ShouldHandlePongFromServerWithId";
-
-            bool wasRaised = false;
-            EventHandler<PongModel> handler = null;
-            handler = delegate (object sender, PongModel pong)
-            {
-                wasRaised = true;
-                Assert.AreEqual(id, pong.Id);
-                _connection.Pong -= handler;
-            };
-            _connection.Pong += handler;
-
-            _mock.Raise(webSocket => webSocket.DdpMessage += null, null, new DdpMessage("pong", "{\"msg\": \"pong\", \"id\": \"" + id + "\"}"));
-
-            Assert.IsTrue(wasRaised);
-        }
-
-        [Test]
-        public void ShouldHandlePongFromServerWithoutId()
-        {
-            string id = "ShouldHandlePongFromServerWithoutId";
-
-            bool wasRaised = false;
-            EventHandler<PongModel> handler = null;
-            handler = delegate (object sender, PongModel pong)
-            {
-                wasRaised = true;
-                Assert.IsNull(pong.Id);
-                _connection.Pong -= handler;
-            };
-            _connection.Pong += handler;
-
-            _mock.Raise(webSocket => webSocket.DdpMessage += null, null, new DdpMessage("pong", "{\"msg\": \"pong\"}"));
-
-            Assert.IsTrue(wasRaised);
-        }
-
-
-        [Test]
         public void ShouldPingWithId()
         {
             string id = "SomeId";
@@ -425,6 +422,100 @@ namespace DDPClient.Tests
             _connection.PingServer();
 
             _mock.Verify(websocket => websocket.SendJson(It.Is<PingModel>(ping => ping.Id == null)));
+        }
+
+        [Test]
+        public void ShouldSubscriberHandleAdded()
+        {
+            string id = "SomeRandomId";
+            int data = 5;
+            string collection = "tasks";
+
+            TestClass res = new TestClass
+            {
+                Id = id,
+                Data = data
+            };
+            string mockResult = "{\"msg\":\"added\",\"id\":\"" + id + "\",\"collection\":\"" + collection + "\",\"fields\": " + JsonConvert.SerializeObject(res) + "}";
+
+            DdpSubscriber<TestClass> ddpSubscriber = _connection.GetSubscriber<TestClass>(collection);
+
+            bool wasRaised = false;
+            EventHandler<SubAddedModel<TestClass>> handler = null;
+            handler = delegate (object sender, SubAddedModel<TestClass> added)
+            {
+                wasRaised = true;
+                Assert.AreEqual(id, added.Id);
+                Assert.AreEqual(id, added.Object.Id);
+                Assert.AreEqual(data, added.Object.Data);
+                ddpSubscriber.Added -= handler;
+            };
+            ddpSubscriber.Added += handler;
+
+            _mock.Raise(webSocket => webSocket.DdpMessage += null, null, new DdpMessage("added", mockResult));
+
+            Assert.IsTrue(wasRaised);
+            ddpSubscriber.Dispose();
+        }
+
+        [Test]
+        public void ShouldSubscriberHandleChanged()
+        {
+            string id = "SomeRandomId";
+            int data = 5;
+            string collection = "tasks";
+
+            TestClass res = new TestClass
+            {
+                Id = id,
+                Data = data
+            };
+            string mockResult = "{\"msg\":\"changed\",\"id\":\"" + id + "\",\"collection\":\"" + collection + "\",\"fields\": " + JsonConvert.SerializeObject(res) + "}";
+
+            DdpSubscriber<TestClass> ddpSubscriber = _connection.GetSubscriber<TestClass>(collection);
+
+            bool wasRaised = false;
+            EventHandler<SubChangedModel<TestClass>> handler = null;
+            handler = delegate (object sender, SubChangedModel<TestClass> changed)
+            {
+                wasRaised = true;
+                Assert.AreEqual(id, changed.Id);
+                Assert.AreEqual(id, changed.Object.Id);
+                Assert.AreEqual(data, changed.Object.Data);
+                ddpSubscriber.Changed -= handler;
+            };
+            ddpSubscriber.Changed += handler;
+
+            _mock.Raise(webSocket => webSocket.DdpMessage += null, null, new DdpMessage("changed", mockResult));
+
+            Assert.IsTrue(wasRaised);
+            ddpSubscriber.Dispose();
+        }
+
+        [Test]
+        public void ShouldSubscriberHandleRemoved()
+        {
+            string id = "SomeRandomId";
+            string collection = "tasks";
+
+            string mockResult = "{\"msg\":\"removed\",\"id\":\"" + id + "\",\"collection\":\"" + collection + "\"}";
+
+            DdpSubscriber<TestClass> ddpSubscriber = _connection.GetSubscriber<TestClass>(collection);
+
+            bool wasRaised = false;
+            EventHandler<SubRemovedModel> handler = null;
+            handler = delegate (object sender, SubRemovedModel changed)
+            {
+                wasRaised = true;
+                Assert.AreEqual(id, changed.Id);
+                ddpSubscriber.Removed -= handler;
+            };
+            ddpSubscriber.Removed += handler;
+
+            _mock.Raise(webSocket => webSocket.DdpMessage += null, null, new DdpMessage("removed", mockResult));
+
+            Assert.IsTrue(wasRaised);
+            ddpSubscriber.Dispose();
         }
     }
 }

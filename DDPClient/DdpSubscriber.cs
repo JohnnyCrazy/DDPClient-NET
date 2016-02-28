@@ -1,12 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using DdpClient.Models.Server;
 
 namespace DdpClient
 {
-    public class DdpSubscriber<T> where T : DdpDocument
+    public class DdpSubscriber<T> : IDisposable where T : DdpDocument
     {
-        private readonly IDdpWebSocket _websocket;
+        private readonly WebSocketAdapterBase _webSocketAdapterBase;
 
         public EventHandler<SubAddedModel<T>> Added;
         public EventHandler<SubAddedBeforeModel<T>> AddedBefore;
@@ -14,10 +15,10 @@ namespace DdpClient
         public EventHandler<SubMovedBeforeModel> MovedBefore;
         public EventHandler<SubRemovedModel> Removed;
 
-        internal DdpSubscriber(IDdpWebSocket webSocket, string name)
+        internal DdpSubscriber(WebSocketAdapterBase webSocketAdapter, string name)
         {
-            _websocket = webSocket;
-            _websocket.DdpMessage += Message;
+            _webSocketAdapterBase = webSocketAdapter;
+            _webSocketAdapterBase.DdpMessage += OnDdpMessage;
 
             Name = name;
             Subscribers = new List<IDdpSubscriber<T>>();
@@ -58,8 +59,9 @@ namespace DdpClient
             Subscribers.ForEach(sub => sub.AddedBefore(addedBefore));
         }
 
-        private void Message(object sender, DdpMessage e)
+        private void OnDdpMessage(object sender, DdpMessage e)
         {
+            Debug.WriteLine(e.Msg);
             if (e.Body["collection"] == null)
                 return;
             if (e.Body["collection"].ToObject<string>() != Name)
@@ -83,6 +85,11 @@ namespace DdpClient
                     HandleMovedBefore(e.Get<SubMovedBeforeModel>());
                     break;
             }
+        }
+
+        public void Dispose()
+        {
+            _webSocketAdapterBase.DdpMessage -= OnDdpMessage;
         }
     }
 }

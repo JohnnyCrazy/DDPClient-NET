@@ -26,8 +26,8 @@ namespace DdpClient.Models
 
     internal class UsernameUser
     {
-        [JsonProperty("user")]
-        public string User { get; set; }
+        [JsonProperty("username")]
+        public string Username { get; set; }
     }
 
     internal class PasswordModel

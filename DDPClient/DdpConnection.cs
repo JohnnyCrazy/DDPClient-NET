@@ -1,38 +1,25 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.Threading;
 using DdpClient.Models;
 using DdpClient.Models.Client;
 using DdpClient.Models.Server;
 using Newtonsoft.Json.Linq;
-using WebSocketSharp;
 
 namespace DdpClient
 {
-    public class DdpConnection : IDisposable
+    public sealed class DdpConnection : IDisposable
     {
         private const string Version = "1";
 
+        private readonly WebSocketAdapterBase _webSocketAdapter;
         private Dictionary<string, Action<MethodResponse>> _methods;
         private readonly string[] _supportedProtocols = {"1", "pre1", "pre2"};
-        private readonly IDdpWebSocket _webSocket;
         private bool _disposed;
 
         /// <summary>
         ///     This is raised when the connection is succesful with Meteor (after <see cref="Open" />)
         /// </summary>
         public EventHandler<ConnectResponse> Connected;
-
-        /// <summary>
-        ///     This is raised when the connection is closed
-        /// </summary>
-        public EventHandler<CloseEventArgs> Closed; //TODO Own CloseEventArgs
-
-        /// <summary>
-        ///     This is raised when the websocket-library encounters errors
-        /// </summary>
-        public EventHandler<ErrorEventArgs> Error; //TODO Own ErrorEventArgs
 
         /// <summary>
         ///     This is raised when the server responeded to a login
@@ -45,6 +32,16 @@ namespace DdpClient
         public EventHandler<EventArgs> Open;
 
         /// <summary>
+        ///     This is raised when the connection is closed
+        /// </summary>
+        public EventHandler<EventArgs> Closed;
+
+        /// <summary>
+        ///     This is rasied when the connection throws errors
+        /// </summary>
+        public EventHandler<Exception> Error; 
+
+        /// <summary>
         ///     This is raised when the server sends a Ping-Msg
         /// </summary>
         public EventHandler<PingModel> Ping;
@@ -54,39 +51,27 @@ namespace DdpClient
         /// </summary>
         public EventHandler<PongModel> Pong;
 
-        public DdpConnection(string url, bool ssl = false)
+        public DdpConnection() : this(new WebSocketSharpAdapter())
         {
-            _webSocket = new DdpWebSocket($"{(ssl ? "wss" : "ws")}://{url}/websocket");
-
-            WebSocketLog = _webSocket.Log;
-            WebSocketLog.Output = (data, s) => { }; //Disable console output...
-
-            Initialize();
+            
         }
 
-        public DdpConnection(IDdpWebSocket webSocket)
+        public DdpConnection(WebSocketAdapterBase webSocketAdapter)
         {
-            _webSocket = webSocket;
+            _webSocketAdapter = webSocketAdapter;
             Initialize();
         }
 
         public string Session { get; set; }
 
-        /// <summary>
-        ///     Should the server reconnect after an abnormal close. (Uses Thread.Sleep)
-        /// </summary>
-        public bool Retry { get; set; }
-
         public Func<string> IdGenerator { get; set; } 
-
-        public Logger WebSocketLog { get; set; }
 
         private void Initialize()
         {
-            _webSocket.OnOpen += WebSocketOnOpen;
-            _webSocket.DdpMessage += WebSocketMessage;
-            _webSocket.OnError += WebSocketOnError;
-            _webSocket.OnClose += WebSocketOnClose;
+            _webSocketAdapter.Opened += WebSocketOnOpen;
+            _webSocketAdapter.Closed += WebSocketOnClose;
+            _webSocketAdapter.Error += WebSocketOnError;
+            _webSocketAdapter.DdpMessage += WebSocketOnDdpMessage;
 
             _methods = new Dictionary<string, Action<MethodResponse>>();
             IdGenerator = DdpUtil.GetRandomId;
@@ -98,19 +83,24 @@ namespace DdpClient
             GC.SuppressFinalize(this);
         }
 
-        public void Connect()
+        public void Connect(string url, bool ssl = false)
         {
-            _webSocket.Connect();
+            _webSocketAdapter.Connect($"{(ssl ? "wss" : "ws")}://{url}/websocket");
+        }
+
+        public void ConnectAsync(string url, bool ssl = false)
+        {
+            _webSocketAdapter.ConnectAsync($"{(ssl ? "wss" : "ws")}://{url}/websocket");
         }
 
         public void Close()
         {
-            Dispose();
+            _webSocketAdapter.Close();
         }
 
         public void PingServer(string id = null)
         {
-            _webSocket.SendJson(new PingModel
+            _webSocketAdapter.SendJson(new PingModel
             {
                 Id = id
             });
@@ -127,7 +117,7 @@ namespace DdpClient
                 },
                 User = new UsernameUser
                 {
-                    User = username
+                    Username = username
                 }
             };
             return Call("login", HandleLogin, model);
@@ -167,7 +157,7 @@ namespace DdpClient
                 Method = name,
                 Params = methodParams
             };
-            _webSocket.SendJson(model);
+            _webSocketAdapter.SendJson(model);
         }
 
         public string Call(string name, Action<MethodResponse> callback, params object[] methodParams)
@@ -179,37 +169,39 @@ namespace DdpClient
                 Params = methodParams
             };
             _methods[model.Id] = callback;
-            _webSocket.SendJson(model);
+            _webSocketAdapter.SendJson(model);
             return model.Id;
         }
 
         public DdpMethodHandler<T> Call<T>(string name, Action<DetailedError, T> callback, params object[] methodParams)
         {
-            DdpMethodHandler<T> methodHandler = new DdpMethodHandler<T>(_webSocket, callback, IdGenerator());
+            DdpMethodHandler<T> methodHandler = new DdpMethodHandler<T>(_webSocketAdapter, callback, IdGenerator());
             MethodModel model = new MethodModel
             {
                 Id = methodHandler.Id,
                 Method = name,
                 Params = methodParams
             };
-            _webSocket.SendJson(model);
+            _webSocketAdapter.SendJson(model);
             return methodHandler;
         }
 
         public DdpSubscriber<T> GetSubscriber<T>(string collectionName) where T : DdpDocument
         {
-            return new DdpSubscriber<T>(_webSocket, collectionName);
+            return new DdpSubscriber<T>(_webSocketAdapter, collectionName);
         }
 
         public DdpSubHandler GetSubHandler(string subName, params object[] param)
         {
-            return new DdpSubHandler(_webSocket, subName, param);
+            return new DdpSubHandler(_webSocketAdapter, subName, param);
         }
 
         private void HandleLogin(MethodResponse response)
         {
-            LoginResponse loginResponse = response.Get<LoginResponse>();
-            loginResponse.Error = response.Error;
+            LoginResponse loginResponse = response.Get<LoginResponse>() ?? new LoginResponse
+            {
+                Error = response.Error
+            };
             Login?.Invoke(this, loginResponse);
         }
 
@@ -233,7 +225,7 @@ namespace DdpClient
 
         private void HandlePing(PingModel ping)
         {
-            _webSocket.SendJson(new PongModel
+            _webSocketAdapter.SendJson(new PongModel
             {
                 Id = ping.Id
             });
@@ -251,7 +243,7 @@ namespace DdpClient
 
         private void WebSocketOnOpen(object sender, EventArgs e)
         {
-            _webSocket.SendJson(new ConnectModel
+            _webSocketAdapter.SendJson(new ConnectModel
             {
                 Session = Session,
                 SupportedProtocols = _supportedProtocols,
@@ -260,7 +252,7 @@ namespace DdpClient
             Open?.Invoke(this, e);
         }
 
-        private void WebSocketMessage(object sender, DdpMessage e)
+        private void WebSocketOnDdpMessage(object sender, DdpMessage e)
         {
             switch (e.Msg)
             {
@@ -280,32 +272,24 @@ namespace DdpClient
             }
         }
 
-        private void WebSocketOnError(object sender, ErrorEventArgs e)
+        private void WebSocketOnError(object sender, Exception e)
         {
             Error?.Invoke(this, e);
         }
 
-        private void WebSocketOnClose(object sender, CloseEventArgs e)
+        private void WebSocketOnClose(object sender, EventArgs e)
         {
             Closed?.Invoke(this, e);
-            if (!e.WasClean && Retry)
-            {
-                while (!_webSocket.IsAlive)
-                {
-                    Thread.Sleep(1000);
-                    _webSocket.Connect();
-                }
-            }
         }
 
-        protected virtual void Dispose(bool disposing)
+        private void Dispose(bool disposing)
         {
             if (!_disposed)
             {
-                if (disposing)
+                if (disposing && _webSocketAdapter.IsAlive())
                 {
                     //dispose managed resources
-                    _webSocket.Close();
+                    _webSocketAdapter.Close();
                 }
             }
             //dispose unmanaged resources

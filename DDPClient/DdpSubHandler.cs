@@ -6,15 +6,15 @@ namespace DdpClient
 {
     public class DdpSubHandler : IDisposable
     {
-        private readonly IDdpWebSocket _webSocket;
+        private readonly WebSocketAdapterBase _webSocketAdapterBase;
 
         public EventHandler<NoSubModel> NoSub;
         public EventHandler<EventArgs> Ready;
 
-        public DdpSubHandler(IDdpWebSocket webSocket, string subName, params object[] subParams)
+        public DdpSubHandler(WebSocketAdapterBase webSocketAdapterBase, string subName, params object[] subParams)
         {
-            _webSocket = webSocket;
-            _webSocket.DdpMessage += Message;
+            _webSocketAdapterBase = webSocketAdapterBase;
+            _webSocketAdapterBase.DdpMessage += Message;
 
             Params = subParams;
             Name = subName;
@@ -37,9 +37,9 @@ namespace DdpClient
                 Name = Name,
                 Params = Params
             };
-            if (!_webSocket.IsAlive)
+            if (!_webSocketAdapterBase.IsAlive())
                 throw new InvalidOperationException("The DDP-Connection is not alive anymore");
-            _webSocket.SendJson(subModel);
+            _webSocketAdapterBase.SendJson(subModel);
         }
 
         public void Unsub()
@@ -48,9 +48,9 @@ namespace DdpClient
             {
                 Id = Id
             };
-            if (!_webSocket.IsAlive)
+            if (!_webSocketAdapterBase.IsAlive())
                 throw new InvalidOperationException("The DDP-Connection is not alive anymore");
-            _webSocket.SendJson(unsubModel);
+            _webSocketAdapterBase.SendJson(unsubModel);
         }
 
         private void HandleNoSub(NoSubModel noSub)
