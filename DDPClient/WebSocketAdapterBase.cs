@@ -10,7 +10,7 @@ namespace DdpClient
         public abstract event EventHandler<EventArgs> Closed;
         public abstract event EventHandler<Exception> Error;
 
-        public event EventHandler<DdpMessage> DdpMessage;
+        public virtual event EventHandler<DdpMessage> DdpMessage;
 
         public abstract void Connect(string url);
 
@@ -23,7 +23,7 @@ namespace DdpClient
         protected abstract void Send(string message);
 
 
-        protected void OnMessageReceived(string data)
+        protected virtual void OnMessageReceived(string data)
         {
             JObject body = JObject.Parse(data);
             if (body["msg"] == null)
@@ -32,7 +32,7 @@ namespace DdpClient
             DdpMessage?.Invoke(this, new DdpMessage(msg, data));
         }
 
-        public void SendJson(object body)
+        public virtual void SendJson(object body)
         {
             string data = JsonConvert.SerializeObject(body);
             Send(data);

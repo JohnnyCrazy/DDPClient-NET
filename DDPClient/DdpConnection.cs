@@ -249,6 +249,7 @@ namespace DdpClient
                 SupportedProtocols = _supportedProtocols,
                 Version = Version
             });
+            Open?.Invoke(this, e);
         }
 
         private void WebSocketOnDdpMessage(object sender, DdpMessage e)

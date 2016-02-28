@@ -33,8 +33,7 @@ namespace DDPClient.Tests
         [Test]
         public void ShouldHandleConnectSuccess()
         {
-            _mock.Setup(websocket => websocket.Connect(""))
-                .Callback(() => _mock.Raise(webSocket => webSocket.Opened += null, null, EventArgs.Empty));
+            _mock.Setup(websocket => websocket.Connect(It.IsAny<string>())).Callback(() => _mock.Raise(webSocket => webSocket.Opened += null, null, EventArgs.Empty));
 
             bool wasRaised = false;
             EventHandler<EventArgs> handler = null;
@@ -48,7 +47,7 @@ namespace DDPClient.Tests
             _connection.Connect("");
 
             Assert.IsTrue(wasRaised);
-            _mock.Verify(webSocket => webSocket.Connect(""));
+            _mock.Verify(webSocket => webSocket.Connect(It.IsAny<string>()));
             _mock.Verify(webSocket => webSocket.SendJson(It.IsAny<ConnectModel>()));
         }
 
