@@ -1,4 +1,4 @@
-# DDPClient-NET [![Build status](https://ci.appveyor.com/api/projects/status/ykk4v2vd33j4wqc1?svg=true)](https://ci.appveyor.com/project/JohnnyCrazy/ddpclient-net)
+# DDPClient-NET [![Build status](https://ci.appveyor.com/api/projects/status/ykk4v2vd33j4wqc1?svg=true)](https://ci.appveyor.com/project/JohnnyCrazy/ddpclient-net) [![NuGet](https://badge.fury.io/nu/DDPClient-NET.svg)](https://badge.fury.io/nu/DDPClient-NET)
 A Client for Meteor's DDP-Protocol written in C#/.NET
 
 ##WIP
