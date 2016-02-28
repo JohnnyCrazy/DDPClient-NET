@@ -10,11 +10,10 @@ This library is currently Work-In-Progress. Further Improvements, documentation 
 static void Main(string [] args)
 {
     //URL to your Meteor location
-    _client = new DdpConnection("localhost:3000");
-    _client.Retry = true; //Retry if we lose connection or initial connection fails
-    _client.Login += OnLogin; //Login Callback
+    _client = new DdpConnection();
+    _client.Login += OnLogin;
     _client.Connected += OnConnected;
-    _client.Connect();
+    _client.Connect("localhost:3000");
 
     Console.ReadKey();
     _client.Close(); //Close when we're done
@@ -28,6 +27,9 @@ private static void OnConnected(object sender, ConnectResponse connectResponse)
     //The client will save this ID and use it for reconnection attempts automatically
     Console.WriteLine("Connected! Our Session-ID: " + connectResponse.Session);
 }
+
+private static void OnLogin(object sender, LoginResponse loginResponse)
+{}
 ```
 
 ###Login
@@ -49,8 +51,8 @@ private static void Login(object sender, LoginResponse loginResponse)
 {
     if(loginResponse.HasError())
         Console.WriteLine(loginResponse.Error.Error);
-    Console.WriteLine("Success: " + loginResponse.Token);
-    Console.WriteLine("Expires In:" + loginResponse.TokenExpires.DateTime);
+    Console.WriteLine("Token: " + loginResponse.Token);
+    Console.WriteLine("Token expires In:" + loginResponse.TokenExpires.DateTime);
 
     //You can save the token and use it later with LoginWithToken (until TokenExpires)
 }
@@ -63,7 +65,6 @@ private static void OnConnected(object sender, ConnectResponse connectResponse)
 {
     //Should check if successful
 
-
      _client.Call("test"); //No parameter
      _client.Call("test", 5); //Single parameter
      _client.Call("test", 5, false, new Task()); //Multiple parameters
@@ -74,7 +75,6 @@ private static void OnConnected(object sender, ConnectResponse connectResponse)
 private static void OnConnected(object sender, ConnectResponse connectResponse)
 {
     //Should check if successful
-
 
     _client.Call("test", (response) =>
     {
@@ -92,17 +92,18 @@ private static void OnConnected(object sender, ConnectResponse connectResponse)
 {
     //Should check if successful
 
-
     _client.Call<Task>("test", (error, result) =>
     {
         if(error != null)
             return; //Print Error...
-        Console.WriteLine(result.Name); //Result is dynamic
+        Console.WriteLine(result.Name); //strongly typed
     });
 }
 ```
 
 ###Collections/Subscribers
+**NOTE:** Make sure you have a listening Subscriber **before** you subscribe to the actual Data, else incoming data could get lost.
+
 ####Event-Based
 ```csharp
 static void Main(string [] args)

@@ -17,7 +17,7 @@ namespace DDPClientNet.Example
             _client.Closed += OnClose;
             _client.Error += OnError;
             _client.Connected += OnConnected;
-            _client.Connect("localhost:3000", false);
+            _client.Connect("localhost:3000");
 
             Console.ReadKey();
             _client.Close();
