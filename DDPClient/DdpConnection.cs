@@ -1,7 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.Threading;
 using DdpClient.Models;
 using DdpClient.Models.Client;
 using DdpClient.Models.Server;
@@ -9,7 +7,7 @@ using Newtonsoft.Json.Linq;
 
 namespace DdpClient
 {
-    public class DdpConnection : IDisposable
+    public sealed class DdpConnection : IDisposable
     {
         private const string Version = "1";
 
@@ -34,6 +32,16 @@ namespace DdpClient
         public EventHandler<EventArgs> Open;
 
         /// <summary>
+        ///     This is raised when the connection is closed
+        /// </summary>
+        public EventHandler<EventArgs> Closed;
+
+        /// <summary>
+        ///     This is rasied when the connection throws errors
+        /// </summary>
+        public EventHandler<Exception> Error; 
+
+        /// <summary>
         ///     This is raised when the server sends a Ping-Msg
         /// </summary>
         public EventHandler<PingModel> Ping;
@@ -43,6 +51,11 @@ namespace DdpClient
         /// </summary>
         public EventHandler<PongModel> Pong;
 
+        public DdpConnection() : this(new WebSocketSharpAdapter())
+        {
+            
+        }
+
         public DdpConnection(WebSocketAdapterBase webSocketAdapter)
         {
             _webSocketAdapter = webSocketAdapter;
@@ -51,19 +64,14 @@ namespace DdpClient
 
         public string Session { get; set; }
 
-        /// <summary>
-        ///     Should the server reconnect after an abnormal close. (Uses Thread.Sleep)
-        /// </summary>
-        public bool Retry { get; set; }
-
         public Func<string> IdGenerator { get; set; } 
 
         private void Initialize()
         {
             _webSocketAdapter.Opened += WebSocketOnOpen;
+            _webSocketAdapter.Closed += WebSocketOnClose;
             _webSocketAdapter.Error += WebSocketOnError;
             _webSocketAdapter.DdpMessage += WebSocketOnDdpMessage;
-            _webSocketAdapter.Closed += WebSocketOnClose;
 
             _methods = new Dictionary<string, Action<MethodResponse>>();
             IdGenerator = DdpUtil.GetRandomId;
@@ -77,8 +85,7 @@ namespace DdpClient
 
         public void Connect(string url, bool ssl = false)
         {
-            string asd = $"{(ssl ? "wss" : "ws")}://{url}/websocket";
-            _webSocketAdapter.Connect(asd);
+            _webSocketAdapter.Connect($"{(ssl ? "wss" : "ws")}://{url}/websocket");
         }
 
         public void ConnectAsync(string url, bool ssl = false)
@@ -89,7 +96,6 @@ namespace DdpClient
         public void Close()
         {
             _webSocketAdapter.Close();
-            Dispose();
         }
 
         public void PingServer(string id = null)
@@ -267,19 +273,19 @@ namespace DdpClient
 
         private void WebSocketOnError(object sender, Exception e)
         {
-            
+            Error?.Invoke(this, e);
         }
 
         private void WebSocketOnClose(object sender, EventArgs e)
         {
-
+            Closed?.Invoke(this, e);
         }
 
-        protected virtual void Dispose(bool disposing)
+        private void Dispose(bool disposing)
         {
             if (!_disposed)
             {
-                if (disposing)
+                if (disposing && _webSocketAdapter.IsAlive())
                 {
                     //dispose managed resources
                     _webSocketAdapter.Close();
